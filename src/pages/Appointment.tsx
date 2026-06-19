@@ -15,7 +15,10 @@ import {
   Clock,
   Check,
   ChevronRight,
+  Hash,
+  Copy,
 } from 'lucide-react';
+import { useAppointmentStore, type AppointmentRecord } from '../hooks/useAppointmentStore';
 
 const processSteps = [
   { icon: Calendar, title: '预约挂号', desc: '在线提交预约信息，选择就诊科室与时间' },
@@ -42,22 +45,150 @@ const followUpMaterials = [
   '目前正在使用的药物',
 ];
 
+function RecordDetail({ record, onNew }: { record: AppointmentRecord; onNew: () => void }) {
+  const cancelRecord = useAppointmentStore((s) => s.cancelRecord);
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(record.id).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  return (
+    <div className="card p-6 md:p-8">
+      <div className="text-center mb-8">
+        <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-success-50 flex items-center justify-center">
+          <CheckCircle2 className="w-8 h-8 text-success-500" />
+        </div>
+        <h3 className="font-display text-2xl font-bold text-neutral-900 mb-2">
+          预约已提交
+        </h3>
+        <p className="text-neutral-500">
+          您的预约信息已记录，请妥善保存预约编号
+        </p>
+      </div>
+
+      <div className="bg-neutral-50 rounded-xl p-5 mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Hash className="w-5 h-5 text-primary-500" />
+            <span className="font-medium text-neutral-900">预约编号</span>
+          </div>
+          <button
+            onClick={handleCopy}
+            className="flex items-center gap-1 text-sm text-primary-600 hover:text-primary-700 transition-colors"
+          >
+            <Copy className="w-4 h-4" />
+            {copied ? '已复制' : '复制'}
+          </button>
+        </div>
+        <p className="text-2xl font-mono font-bold text-primary-600 tracking-wider">
+          {record.id}
+        </p>
+        <div className="flex items-center gap-2 mt-2">
+          <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
+            record.status === '待确认'
+              ? 'bg-amber-50 text-amber-700'
+              : record.status === '已确认'
+              ? 'bg-success-50 text-success-700'
+              : 'bg-neutral-100 text-neutral-500'
+          }`}>
+            {record.status}
+          </span>
+          <span className="text-xs text-neutral-400">提交于 {record.createdAt}</span>
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        <h4 className="font-medium text-neutral-900">预约详情</h4>
+        <div className="grid grid-cols-2 gap-4 text-sm">
+          <div>
+            <p className="text-neutral-500 mb-1">患者姓名</p>
+            <p className="font-medium text-neutral-900">{record.name}</p>
+          </div>
+          <div>
+            <p className="text-neutral-500 mb-1">联系电话</p>
+            <p className="font-medium text-neutral-900">{record.phone}</p>
+          </div>
+          <div>
+            <p className="text-neutral-500 mb-1">就诊类型</p>
+            <p className="font-medium text-neutral-900">{record.type}</p>
+          </div>
+          <div>
+            <p className="text-neutral-500 mb-1">预约科室</p>
+            <p className="font-medium text-neutral-900">{record.department}</p>
+          </div>
+          <div>
+            <p className="text-neutral-500 mb-1">就诊日期</p>
+            <p className="font-medium text-neutral-900">{record.date}</p>
+          </div>
+          <div>
+            <p className="text-neutral-500 mb-1">就诊时段</p>
+            <p className="font-medium text-neutral-900">{record.time || '未指定'}</p>
+          </div>
+        </div>
+        {record.remark && (
+          <div>
+            <p className="text-neutral-500 text-sm mb-1">备注</p>
+            <p className="text-neutral-700 text-sm">{record.remark}</p>
+          </div>
+        )}
+      </div>
+
+      <div className="mt-6 p-4 bg-amber-50 rounded-lg border border-amber-100">
+        <div className="flex gap-2">
+          <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+          <div className="text-xs text-amber-800 leading-relaxed">
+            <p>医院工作人员将在1个工作日内通过电话与您确认预约，请保持手机畅通。到院时请报出预约编号 <strong>{record.id}</strong>。</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-6 flex flex-col sm:flex-row gap-3">
+        <button onClick={onNew} className="btn-primary flex-1">
+          继续预约
+        </button>
+        <button
+          onClick={() => cancelRecord(record.id)}
+          className="btn-secondary flex-1 !border-neutral-300 !text-neutral-600 hover:!bg-neutral-50"
+        >
+          取消预约
+        </button>
+      </div>
+    </div>
+  );
+}
+
+const emptyForm = {
+  name: '',
+  phone: '',
+  type: '初诊',
+  department: '',
+  date: '',
+  time: '',
+  remark: '',
+};
+
 export default function Appointment() {
-  const [submitted, setSubmitted] = useState(false);
-  const [formData, setFormData] = useState({
-    name: '',
-    phone: '',
-    type: '初诊',
-    department: '',
-    date: '',
-    time: '',
-    remark: '',
-  });
+  const { records, addRecord } = useAppointmentStore();
+  const [lastRecord, setLastRecord] = useState<AppointmentRecord | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
+  const [formData, setFormData] = useState(emptyForm);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmitted(true);
+    const record = addRecord(formData);
+    setLastRecord(record);
+    setFormData(emptyForm);
   };
+
+  const handleNew = () => {
+    setLastRecord(null);
+  };
+
+  const activeRecords = records.filter((r) => r.status !== '已取消');
 
   return (
     <div>
@@ -191,41 +322,46 @@ export default function Appointment() {
         <div className="container">
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-10">
             <div className="lg:col-span-3">
-              <h2 className="font-display text-2xl md:text-3xl font-bold text-neutral-900 mb-8">
-                填写预约信息
-              </h2>
-
-              {submitted ? (
-                <div className="card p-10 text-center">
-                  <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-success-50 flex items-center justify-center">
-                    <CheckCircle2 className="w-10 h-10 text-success-500" />
-                  </div>
-                  <h3 className="font-display text-2xl font-bold text-neutral-900 mb-3">
-                    预约提交成功
-                  </h3>
-                  <p className="text-neutral-600 mb-6 max-w-md mx-auto">
-                    感谢您的预约！医院工作人员将在1个工作日内通过电话
-                    <span className="font-medium text-neutral-900"> {formData.phone} </span>
-                    与您确认预约详情，请保持手机畅通。
-                  </p>
+              <div className="flex items-center justify-between mb-8">
+                <h2 className="font-display text-2xl md:text-3xl font-bold text-neutral-900">
+                  {lastRecord ? '预约结果' : '填写预约信息'}
+                </h2>
+                {activeRecords.length > 0 && !lastRecord && (
                   <button
-                    onClick={() => {
-                      setSubmitted(false);
-                      setFormData({
-                        name: '',
-                        phone: '',
-                        type: '初诊',
-                        department: '',
-                        date: '',
-                        time: '',
-                        remark: '',
-                      });
-                    }}
-                    className="btn-secondary"
+                    onClick={() => setShowHistory(!showHistory)}
+                    className="text-sm text-primary-600 font-medium hover:text-primary-700"
                   >
-                    再预约一个
+                    {showHistory ? '收起记录' : `我的预约 (${activeRecords.length})`}
                   </button>
+                )}
+              </div>
+
+              {showHistory && !lastRecord && activeRecords.length > 0 && (
+                <div className="mb-8 space-y-3">
+                  {activeRecords.map((r) => (
+                    <div key={r.id} className="card p-4 flex items-center justify-between">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="font-mono font-bold text-primary-600 text-sm">{r.id}</span>
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                            r.status === '待确认'
+                              ? 'bg-amber-50 text-amber-700'
+                              : 'bg-success-50 text-success-700'
+                          }`}>
+                            {r.status}
+                          </span>
+                        </div>
+                        <p className="text-sm text-neutral-600">
+                          {r.name} · {r.department} · {r.date} {r.time}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
                 </div>
+              )}
+
+              {lastRecord ? (
+                <RecordDetail record={lastRecord} onNew={handleNew} />
               ) : (
                 <form onSubmit={handleSubmit} className="card p-6 md:p-8">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
